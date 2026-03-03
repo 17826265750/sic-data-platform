@@ -1,21 +1,32 @@
-import { useState } from 'react'
-import { Card, Button, Space, Upload, message, List, Typography, Steps } from 'antd'
-import { UploadOutlined, PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons'
+import { useState, useCallback } from 'react'
+import { Card, Button, Space, message, List, Typography, Steps } from 'antd'
+import { PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons'
 import FileUploader from '../components/common/FileUploader'
 import JobProgress from '../components/common/JobProgress'
 import { parameterCheckApi, jobsApi } from '../api'
+import { useJobPolling } from '../hooks/useJobPolling'
 import type { JobInfo } from '../api/types'
 
 const { Text, Paragraph } = Typography
 
 export default function ParameterCheck() {
   const [uploadedFiles, setUploadedFiles] = useState<{ id: string; name: string }[]>([])
-  const [currentJob, setCurrentJob] = useState<JobInfo | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const handleUploadSuccess = (fileId: string, filename: string) => {
+  // Use custom hook for job polling - prevents memory leaks
+  const { job, isPolling, startPolling, stopPolling } = useJobPolling({
+    interval: 2000,
+    onComplete: (completedJob: JobInfo) => {
+      message.success('数据处理完成！')
+    },
+    onError: (error: string) => {
+      message.error(`处理失败: ${error}`)
+    },
+  })
+
+  const handleUploadSuccess = useCallback((fileId: string, filename: string) => {
     setUploadedFiles((prev) => [...prev, { id: fileId, name: filename }])
-  }
+  }, [])
 
   const handleProcess = async () => {
     if (uploadedFiles.length === 0) {
@@ -29,47 +40,31 @@ export default function ParameterCheck() {
         file_ids: uploadedFiles.map((f) => f.id),
       })
 
-      // 开始轮询任务状态
-      pollJobStatus(response.data.job_id)
+      // Start polling using the hook
+      startPolling(response.data.job_id)
     } catch (error) {
-      message.error('启动处理任务失败')
+      const errorMessage = error instanceof Error ? error.message : '启动处理任务失败'
+      message.error(errorMessage)
     } finally {
       setLoading(false)
     }
   }
 
-  const pollJobStatus = async (jobId: string) => {
-    const poll = async () => {
-      try {
-        const response = await jobsApi.getJob(jobId)
-        setCurrentJob(response.data)
-
-        if (response.data.status === 'pending' || response.data.status === 'running') {
-          setTimeout(poll, 2000)
-        }
-      } catch (error) {
-        console.error('Poll error:', error)
-      }
-    }
-
-    poll()
-  }
-
   const handleDownload = () => {
-    if (currentJob) {
-      window.open(jobsApi.downloadResult(currentJob.job_id), '_blank')
+    if (job) {
+      window.open(jobsApi.downloadResult(job.job_id), '_blank')
     }
   }
 
   const handleReset = () => {
+    stopPolling()
     setUploadedFiles([])
-    setCurrentJob(null)
   }
 
   return (
     <div>
       <Steps
-        current={currentJob ? (currentJob.status === 'completed' ? 2 : 1) : 0}
+        current={job ? (job.status === 'completed' ? 2 : 1) : 0}
         items={[
           { title: '上传文件', description: '上传Excel模板和数据文件' },
           { title: '处理数据', description: '自动匹配和填充数据' },
@@ -112,24 +107,24 @@ export default function ParameterCheck() {
           type="primary"
           icon={<PlayCircleOutlined />}
           onClick={handleProcess}
-          loading={loading}
-          disabled={uploadedFiles.length === 0}
+          loading={loading || isPolling}
+          disabled={uploadedFiles.length === 0 || isPolling}
         >
-          开始处理
+          {isPolling ? '处理中...' : '开始处理'}
         </Button>
         <Button icon={<ReloadOutlined />} onClick={handleReset}>
           重置
         </Button>
       </Space>
 
-      {currentJob && (
+      {job && (
         <JobProgress
-          jobId={currentJob.job_id}
-          status={currentJob.status}
-          progress={currentJob.progress}
-          message={currentJob.message}
-          error={currentJob.error}
-          result={currentJob.result}
+          jobId={job.job_id}
+          status={job.status}
+          progress={job.progress}
+          message={job.message}
+          error={job.error}
+          result={job.result}
           onDownload={handleDownload}
         />
       )}

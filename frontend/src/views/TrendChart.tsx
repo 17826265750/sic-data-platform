@@ -1,12 +1,12 @@
-import { useState } from 'react'
-import { Card, Form, Button, Space, Input, Select, Typography, Divider, message, Table, Tabs } from 'antd'
+import { useState, useCallback } from 'react'
+import { Card, Form, Button, Space, Input, Select, Typography, Divider, message, Table, InputNumber } from 'antd'
 import { PlayCircleOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import JobProgress from '../components/common/JobProgress'
 import { trendChartApi, jobsApi } from '../api'
+import { useJobPolling } from '../hooks/useJobPolling'
 import type { JobInfo } from '../api/types'
 
 const { Title, Paragraph, Text } = Typography
-const { TabPane } = Tabs
 
 interface ProductData {
   name: string
@@ -19,40 +19,47 @@ export default function TrendChart() {
   const [products, setProducts] = useState<ProductData[]>([
     { name: '', means: [0, 0, 0, 0], stds: [0, 0, 0, 0] },
   ])
-  const [currentJob, setCurrentJob] = useState<JobInfo | null>(null)
-  const [loading, setLoading] = useState(false)
   const [chartType, setChartType] = useState<'VF' | 'BV' | 'IR'>('VF')
 
   const timeLabels = ['初始值(T0)', '168小时', '500小时', '1000小时']
 
-  const addProduct = () => {
-    setProducts([
-      ...products,
+  // Use custom hook for job polling - prevents memory leaks
+  const { job, isPolling, startPolling } = useJobPolling({
+    onComplete: () => message.success('趋势图生成完成！'),
+    onError: (error) => message.error(`生成失败: ${error}`),
+  })
+
+  const addProduct = useCallback(() => {
+    setProducts((prev) => [
+      ...prev,
       { name: '', means: [0, 0, 0, 0], stds: [0, 0, 0, 0] },
     ])
-  }
+  }, [])
 
-  const removeProduct = (index: number) => {
-    if (products.length > 1) {
-      setProducts(products.filter((_, i) => i !== index))
-    }
-  }
+  const removeProduct = useCallback((index: number) => {
+    setProducts((prev) => {
+      if (prev.length <= 1) return prev
+      return prev.filter((_, i) => i !== index)
+    })
+  }, [])
 
-  const updateProduct = (
+  const updateProduct = useCallback((
     index: number,
     field: 'name' | 'means' | 'stds',
     value: string | number[]
   ) => {
-    const newProducts = [...products]
-    if (field === 'name') {
-      newProducts[index].name = value as string
-    } else {
-      newProducts[index][field] = value as number[]
-    }
-    setProducts(newProducts)
-  }
+    setProducts((prev) => {
+      const newProducts = [...prev]
+      if (field === 'name') {
+        newProducts[index].name = value as string
+      } else {
+        newProducts[index][field] = value as number[]
+      }
+      return newProducts
+    })
+  }, [])
 
-  const handleGenerate = async (type: 'VF' | 'BV' | 'IR') => {
+  const handleGenerate = useCallback(async (type: 'VF' | 'BV' | 'IR') => {
     // 验证数据
     const validProducts = products.filter((p) => p.name.trim() !== '')
     if (validProducts.length === 0) {
@@ -61,7 +68,6 @@ export default function TrendChart() {
     }
 
     setChartType(type)
-    setLoading(true)
 
     try {
       const means: Record<string, number[]> = {}
@@ -72,7 +78,11 @@ export default function TrendChart() {
         stds[p.name] = p.stds
       })
 
-      const response = await trendChartApi.generateVF({
+      const apiMethod = type === 'VF' ? trendChartApi.generateVF
+        : type === 'BV' ? trendChartApi.generateBV
+        : trendChartApi.generateIR
+
+      const response = await apiMethod({
         chart_type: type,
         product_list: validProducts.map((p) => p.name),
         time_labels: timeLabels,
@@ -80,42 +90,25 @@ export default function TrendChart() {
         stds,
       })
 
-      pollJobStatus(response.data.job_id)
+      startPolling(response.data.job_id)
     } catch (error) {
-      message.error('启动任务失败')
-    } finally {
-      setLoading(false)
+      const errorMessage = error instanceof Error ? error.message : '启动任务失败'
+      message.error(errorMessage)
     }
-  }
+  }, [products, timeLabels, startPolling])
 
-  const pollJobStatus = async (jobId: string) => {
-    const poll = async () => {
-      try {
-        const response = await jobsApi.getJob(jobId)
-        setCurrentJob(response.data)
-
-        if (response.data.status === 'pending' || response.data.status === 'running') {
-          setTimeout(poll, 2000)
-        }
-      } catch (error) {
-        console.error('Poll error:', error)
-      }
+  const handleDownload = useCallback(() => {
+    if (job) {
+      window.open(jobsApi.downloadResult(job.job_id), '_blank')
     }
-
-    poll()
-  }
-
-  const handleDownload = () => {
-    if (currentJob) {
-      window.open(jobsApi.downloadResult(currentJob.job_id), '_blank')
-    }
-  }
+  }, [job])
 
   const columns = [
     {
       title: '产品型号',
       dataIndex: 'name',
       key: 'name',
+      width: 150,
       render: (value: string, _: ProductData, index: number) => (
         <Input
           value={value}
@@ -132,6 +125,7 @@ export default function TrendChart() {
           title: '均值',
           dataIndex: 'means',
           key: `mean-${timeIndex}`,
+          width: 100,
           render: (_: number[], record: ProductData, index: number) => (
             <InputNumber
               value={record.means[timeIndex]}
@@ -141,6 +135,8 @@ export default function TrendChart() {
                 updateProduct(index, 'means', newMeans)
               }}
               style={{ width: '100%' }}
+              step={chartType === 'VF' ? 0.001 : 0.1}
+              precision={chartType === 'VF' ? 3 : 1}
             />
           ),
         },
@@ -148,6 +144,7 @@ export default function TrendChart() {
           title: '标准差',
           dataIndex: 'stds',
           key: `std-${timeIndex}`,
+          width: 100,
           render: (_: number[], record: ProductData, index: number) => (
             <InputNumber
               value={record.stds[timeIndex]}
@@ -157,6 +154,9 @@ export default function TrendChart() {
                 updateProduct(index, 'stds', newStds)
               }}
               style={{ width: '100%' }}
+              step={0.001}
+              precision={3}
+              min={0}
             />
           ),
         },
@@ -165,6 +165,7 @@ export default function TrendChart() {
     {
       title: '操作',
       key: 'action',
+      width: 60,
       render: (_: unknown, __: ProductData, index: number) => (
         <Button
           type="text"
@@ -203,6 +204,7 @@ export default function TrendChart() {
             pagination={false}
             size="small"
             rowKey={(_, index) => `product-${index}`}
+            scroll={{ x: 'max-content' }}
           />
         </Space>
       </Card>
@@ -213,7 +215,8 @@ export default function TrendChart() {
             type="primary"
             icon={<PlayCircleOutlined />}
             onClick={() => handleGenerate('VF')}
-            loading={loading && chartType === 'VF'}
+            loading={isPolling && chartType === 'VF'}
+            disabled={isPolling}
           >
             生成VF趋势图
           </Button>
@@ -221,7 +224,8 @@ export default function TrendChart() {
             type="primary"
             icon={<PlayCircleOutlined />}
             onClick={() => handleGenerate('BV')}
-            loading={loading && chartType === 'BV'}
+            loading={isPolling && chartType === 'BV'}
+            disabled={isPolling}
             style={{ background: '#52c41a', borderColor: '#52c41a' }}
           >
             生成BV趋势图
@@ -230,7 +234,8 @@ export default function TrendChart() {
             type="primary"
             icon={<PlayCircleOutlined />}
             onClick={() => handleGenerate('IR')}
-            loading={loading && chartType === 'IR'}
+            loading={isPolling && chartType === 'IR'}
+            disabled={isPolling}
             style={{ background: '#722ed1', borderColor: '#722ed1' }}
           >
             生成IR趋势图
@@ -238,29 +243,17 @@ export default function TrendChart() {
         </Space>
       </Card>
 
-      {currentJob && (
+      {job && (
         <JobProgress
-          jobId={currentJob.job_id}
-          status={currentJob.status}
-          progress={currentJob.progress}
-          message={currentJob.message}
-          error={currentJob.error}
-          result={currentJob.result}
+          jobId={job.job_id}
+          status={job.status}
+          progress={job.progress}
+          message={job.message}
+          error={job.error}
+          result={job.result}
           onDownload={handleDownload}
         />
       )}
     </div>
-  )
-}
-
-// InputNumber component
-function InputNumber({ value, onChange, style }: { value: number; onChange: (val: number | null) => void; style?: React.CSSProperties }) {
-  return (
-    <Input
-      type="number"
-      value={value}
-      onChange={(e) => onChange(parseFloat(e.target.value) || null)}
-      style={style}
-    />
   )
 }

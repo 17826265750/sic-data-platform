@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
-import { Card, Form, Button, Space, Select, Typography, Divider, message, Alert, Steps, Upload } from 'antd'
+import { useState, useCallback, useEffect } from 'react'
+import { Card, Form, Button, Space, Select, Typography, Divider, message, Alert, Steps, Upload, Input } from 'antd'
 import { PlayCircleOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
 import JobProgress from '../components/common/JobProgress'
 import { reportGenerationApi, jobsApi } from '../api'
-import type { JobInfo } from '../api/types'
+import { useJobPolling } from '../hooks/useJobPolling'
 
 const { Paragraph, Text } = Typography
 
@@ -11,57 +11,62 @@ export default function ReportGeneration() {
   const [templateId, setTemplateId] = useState<string | null>(null)
   const [dataFileId, setDataFileId] = useState<string | null>(null)
   const [reportTypes, setReportTypes] = useState<{ code: string; name: string; description: string }[]>([])
-  const [currentJob, setCurrentJob] = useState<JobInfo | null>(null)
-  const [loading, setLoading] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
 
   const [form] = Form.useForm()
+
+  // Use custom hook for job polling
+  const { job, isPolling, startPolling, stopPolling } = useJobPolling({
+    onComplete: () => message.success('报告生成完成！'),
+    onError: (error) => message.error(`生成失败: ${error}`),
+  })
 
   useEffect(() => {
     loadReportTypes()
   }, [])
 
-  const loadReportTypes = async () => {
+  const loadReportTypes = useCallback(async () => {
     try {
       const response = await reportGenerationApi.getReportTypes()
       setReportTypes(response.data.report_types)
     } catch (error) {
       console.error('Load report types error:', error)
     }
-  }
+  }, [])
 
-  const handleTemplateUpload = async (file: File) => {
+  const handleTemplateUpload = useCallback(async (file: File) => {
     try {
       const response = await reportGenerationApi.uploadTemplate(file)
       setTemplateId(response.data.file_id)
       setCurrentStep(1)
       message.success('模板上传成功')
     } catch (error) {
-      message.error('模板上传失败')
+      const errorMessage = error instanceof Error ? error.message : '模板上传失败'
+      message.error(errorMessage)
     }
     return false
-  }
+  }, [])
 
-  const handleDataUpload = async (file: File) => {
+  const handleDataUpload = useCallback(async (file: File) => {
     try {
       const response = await reportGenerationApi.uploadData(file)
       setDataFileId(response.data.file_id)
       setCurrentStep(2)
       message.success('数据文件上传成功')
     } catch (error) {
-      message.error('数据文件上传失败')
+      const errorMessage = error instanceof Error ? error.message : '数据文件上传失败'
+      message.error(errorMessage)
     }
     return false
-  }
+  }, [])
 
-  const handleGenerate = async () => {
+  const handleGenerate = useCallback(async () => {
     if (!templateId || !dataFileId) {
       message.warning('请先上传模板和数据文件')
       return
     }
 
     const values = form.getFieldsValue()
-    setLoading(true)
 
     try {
       const response = await reportGenerationApi.generate({
@@ -71,44 +76,26 @@ export default function ReportGeneration() {
         output_name: values.output_name,
       })
 
-      pollJobStatus(response.data.job_id)
+      startPolling(response.data.job_id)
     } catch (error) {
-      message.error('启动报告生成失败')
-    } finally {
-      setLoading(false)
+      const errorMessage = error instanceof Error ? error.message : '启动报告生成失败'
+      message.error(errorMessage)
     }
-  }
+  }, [templateId, dataFileId, form, startPolling])
 
-  const pollJobStatus = async (jobId: string) => {
-    const poll = async () => {
-      try {
-        const response = await jobsApi.getJob(jobId)
-        setCurrentJob(response.data)
-
-        if (response.data.status === 'pending' || response.data.status === 'running') {
-          setTimeout(poll, 2000)
-        }
-      } catch (error) {
-        console.error('Poll error:', error)
-      }
+  const handleDownload = useCallback(() => {
+    if (job) {
+      window.open(jobsApi.downloadResult(job.job_id), '_blank')
     }
+  }, [job])
 
-    poll()
-  }
-
-  const handleDownload = () => {
-    if (currentJob) {
-      window.open(jobsApi.downloadResult(currentJob.job_id), '_blank')
-    }
-  }
-
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
+    stopPolling()
     setTemplateId(null)
     setDataFileId(null)
-    setCurrentJob(null)
     setCurrentStep(0)
     form.resetFields()
-  }
+  }, [stopPolling, form])
 
   return (
     <div>
@@ -185,9 +172,7 @@ export default function ReportGeneration() {
           </Form.Item>
 
           <Form.Item label="输出文件名 (可选)" name="output_name">
-            <input
-              type="text"
-              className="ant-input"
+            <Input
               style={{ width: 300 }}
               placeholder="不填写则自动生成"
             />
@@ -200,24 +185,24 @@ export default function ReportGeneration() {
           type="primary"
           icon={<PlayCircleOutlined />}
           onClick={handleGenerate}
-          loading={loading}
-          disabled={!templateId || !dataFileId}
+          loading={isPolling}
+          disabled={!templateId || !dataFileId || isPolling}
         >
-          生成报告
+          {isPolling ? '生成中...' : '生成报告'}
         </Button>
         <Button icon={<ReloadOutlined />} onClick={handleReset}>
           重置
         </Button>
       </Space>
 
-      {currentJob && (
+      {job && (
         <JobProgress
-          jobId={currentJob.job_id}
-          status={currentJob.status}
-          progress={currentJob.progress}
-          message={currentJob.message}
-          error={currentJob.error}
-          result={currentJob.result}
+          jobId={job.job_id}
+          status={job.status}
+          progress={job.progress}
+          message={job.message}
+          error={job.error}
+          result={job.result}
           onDownload={handleDownload}
         />
       )}

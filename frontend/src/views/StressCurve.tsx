@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { Card, Form, Button, Space, InputNumber, Switch, Select, Typography, Divider, message, Alert } from 'antd'
 import { PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons'
 import FileUploader from '../components/common/FileUploader'
 import JobProgress from '../components/common/JobProgress'
 import { stressCurveApi, jobsApi } from '../api'
-import type { JobInfo } from '../api/types'
+import { useJobPolling } from '../hooks/useJobPolling'
 
 const { Paragraph, Text } = Typography
 
@@ -16,12 +16,16 @@ export default function StressCurve() {
     time_range: { min: number; max: number }
     leakage_columns: string[]
   } | null>(null)
-  const [currentJob, setCurrentJob] = useState<JobInfo | null>(null)
-  const [loading, setLoading] = useState(false)
 
   const [form] = Form.useForm()
 
-  const handleUploadSuccess = async (uploadedFileId: string, filename: string) => {
+  // Use custom hook for job polling
+  const { job, isPolling, startPolling, stopPolling } = useJobPolling({
+    onComplete: () => message.success('应力曲线分析完成！'),
+    onError: (error) => message.error(`分析失败: ${error}`),
+  })
+
+  const handleUploadSuccess = useCallback(async (uploadedFileId: string, filename: string) => {
     setFileId(uploadedFileId)
     // 获取文件预览信息
     try {
@@ -34,16 +38,15 @@ export default function StressCurve() {
     } catch (error) {
       console.error('Preview error:', error)
     }
-  }
+  }, [form])
 
-  const handleAnalyze = async () => {
+  const handleAnalyze = useCallback(async () => {
     if (!fileId) {
       message.warning('请先上传数据文件')
       return
     }
 
     const values = form.getFieldsValue()
-    setLoading(true)
 
     try {
       const response = await stressCurveApi.analyze({
@@ -56,43 +59,25 @@ export default function StressCurve() {
         smooth_window: values.smooth_window || 5,
       })
 
-      pollJobStatus(response.data.job_id)
+      startPolling(response.data.job_id)
     } catch (error) {
-      message.error('启动分析任务失败')
-    } finally {
-      setLoading(false)
+      const errorMessage = error instanceof Error ? error.message : '启动分析任务失败'
+      message.error(errorMessage)
     }
-  }
+  }, [fileId, form, startPolling])
 
-  const pollJobStatus = async (jobId: string) => {
-    const poll = async () => {
-      try {
-        const response = await jobsApi.getJob(jobId)
-        setCurrentJob(response.data)
-
-        if (response.data.status === 'pending' || response.data.status === 'running') {
-          setTimeout(poll, 2000)
-        }
-      } catch (error) {
-        console.error('Poll error:', error)
-      }
+  const handleDownload = useCallback(() => {
+    if (job) {
+      window.open(jobsApi.downloadResult(job.job_id), '_blank')
     }
+  }, [job])
 
-    poll()
-  }
-
-  const handleDownload = () => {
-    if (currentJob) {
-      window.open(jobsApi.downloadResult(currentJob.job_id), '_blank')
-    }
-  }
-
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
+    stopPolling()
     setFileId(null)
     setFileInfo(null)
-    setCurrentJob(null)
     form.resetFields()
-  }
+  }, [stopPolling, form])
 
   return (
     <div>
@@ -172,24 +157,24 @@ export default function StressCurve() {
           type="primary"
           icon={<PlayCircleOutlined />}
           onClick={handleAnalyze}
-          loading={loading}
-          disabled={!fileId}
+          loading={isPolling}
+          disabled={!fileId || isPolling}
         >
-          开始分析
+          {isPolling ? '分析中...' : '开始分析'}
         </Button>
         <Button icon={<ReloadOutlined />} onClick={handleReset}>
           重置
         </Button>
       </Space>
 
-      {currentJob && (
+      {job && (
         <JobProgress
-          jobId={currentJob.job_id}
-          status={currentJob.status}
-          progress={currentJob.progress}
-          message={currentJob.message}
-          error={currentJob.error}
-          result={currentJob.result}
+          jobId={job.job_id}
+          status={job.status}
+          progress={job.progress}
+          message={job.message}
+          error={job.error}
+          result={job.result}
           onDownload={handleDownload}
         />
       )}

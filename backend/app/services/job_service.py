@@ -2,21 +2,40 @@
 Job Service - 任务管理服务
 """
 import json
+import logging
 from datetime import datetime
 from typing import Dict, List, Optional
-import redis
+from redis.asyncio import from_url as async_from_url
 import uuid
 
 from app.config import settings
 from app.models.schemas import JobStatus
+
+logger = logging.getLogger(__name__)
 
 
 class JobService:
     """任务管理服务 - 使用Redis存储任务状态"""
 
     def __init__(self):
-        self.redis = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        self._redis = None
         self.key_prefix = "job:"
+
+    async def _get_redis(self):
+        """获取异步Redis连接"""
+        if self._redis is None:
+            self._redis = await async_from_url(
+                settings.REDIS_URL,
+                decode_responses=True,
+                encoding="utf-8"
+            )
+        return self._redis
+
+    async def close(self):
+        """关闭Redis连接"""
+        if self._redis:
+            await self._redis.close()
+            self._redis = None
 
     async def create_job(self, job_type: str, params: Dict) -> str:
         """
@@ -29,6 +48,7 @@ class JobService:
         Returns:
             任务ID
         """
+        redis = await self._get_redis()
         job_id = str(uuid.uuid4())
         now = datetime.utcnow().isoformat()
 
@@ -38,14 +58,15 @@ class JobService:
             "status": JobStatus.PENDING.value,
             "progress": 0,
             "message": "任务已创建，等待处理",
-            "params": json.dumps(params),
-            "result": None,
-            "error": None,
+            "params": json.dumps(params, ensure_ascii=False),
+            "result": "",
+            "error": "",
             "created_at": now,
             "updated_at": now
         }
 
-        self.redis.hset(f"{self.key_prefix}{job_id}", mapping=job_data)
+        await redis.hset(f"{self.key_prefix}{job_id}", mapping=job_data)
+        logger.info(f"Job created: {job_id} (type: {job_type})")
         return job_id
 
     async def get_job(self, job_id: str) -> Optional[Dict]:
@@ -58,7 +79,8 @@ class JobService:
         Returns:
             任务信息字典
         """
-        data = self.redis.hgetall(f"{self.key_prefix}{job_id}")
+        redis = await self._get_redis()
+        data = await redis.hgetall(f"{self.key_prefix}{job_id}")
         if not data:
             return None
 
@@ -70,7 +92,7 @@ class JobService:
             "progress": int(data.get("progress", 0)),
             "message": data.get("message"),
             "result": json.loads(data.get("result")) if data.get("result") else None,
-            "error": data.get("error"),
+            "error": data.get("error") or None,
             "created_at": data.get("created_at"),
             "updated_at": data.get("updated_at")
         }
@@ -87,19 +109,20 @@ class JobService:
         Returns:
             是否成功
         """
+        redis = await self._get_redis()
         key = f"{self.key_prefix}{job_id}"
-        if not self.redis.exists(key):
+        if not await redis.exists(key):
             return False
 
         updates["updated_at"] = datetime.utcnow().isoformat()
 
         # 处理特殊字段
         if "result" in updates and isinstance(updates["result"], dict):
-            updates["result"] = json.dumps(updates["result"])
+            updates["result"] = json.dumps(updates["result"], ensure_ascii=False)
         if "status" in updates and isinstance(updates["status"], JobStatus):
             updates["status"] = updates["status"].value
 
-        self.redis.hset(key, mapping=updates)
+        await redis.hset(key, mapping=updates)
         return True
 
     async def update_progress(self, job_id: str, progress: int, message: str = None):
@@ -131,6 +154,7 @@ class JobService:
             "result": result,
             "message": "任务处理完成"
         })
+        logger.info(f"Job completed: {job_id}")
 
     async def set_failed(self, job_id: str, error: str):
         """设置任务为失败"""
@@ -139,6 +163,7 @@ class JobService:
             "error": error,
             "message": f"任务失败: {error}"
         })
+        logger.error(f"Job failed: {job_id} - {error}")
 
     async def list_jobs(
         self,
@@ -159,12 +184,13 @@ class JobService:
         Returns:
             任务列表
         """
+        redis = await self._get_redis()
         # 获取所有job keys
-        keys = self.redis.keys(f"{self.key_prefix}*")
+        keys = await redis.keys(f"{self.key_prefix}*")
         jobs = []
 
         for key in keys:
-            data = self.redis.hgetall(key)
+            data = await redis.hgetall(key)
             if not data:
                 continue
 
@@ -174,7 +200,9 @@ class JobService:
             if job_type and data.get("job_type") != job_type:
                 continue
 
-            jobs.append(await self.get_job(data.get("job_id")))
+            job_info = await self.get_job(data.get("job_id"))
+            if job_info:
+                jobs.append(job_info)
 
         # 按创建时间倒序
         jobs.sort(key=lambda x: x.get("created_at", ""), reverse=True)
@@ -189,3 +217,10 @@ class JobService:
         """统计任务数量"""
         jobs = await self.list_jobs(status=status, job_type=job_type, limit=10000)
         return len(jobs)
+
+    async def delete_job(self, job_id: str) -> bool:
+        """删除任务"""
+        redis = await self._get_redis()
+        key = f"{self.key_prefix}{job_id}"
+        result = await redis.delete(key)
+        return result > 0
