@@ -33,7 +33,7 @@ async def generate_vf_trend_chart(request: TrendChartRequest):
         params=request.model_dump()
     )
 
-    from app.workers.tasks.processing_tasks import process_trend_chart_task
+    from workers.tasks.processing_tasks import process_trend_chart_task
     process_trend_chart_task.delay(job_id, request.model_dump())
 
     return {
@@ -59,7 +59,7 @@ async def generate_bv_trend_chart(request: TrendChartRequest):
         params=request.model_dump()
     )
 
-    from app.workers.tasks.processing_tasks import process_trend_chart_task
+    from workers.tasks.processing_tasks import process_trend_chart_task
     process_trend_chart_task.delay(job_id, request.model_dump())
 
     return {
@@ -85,7 +85,7 @@ async def generate_ir_trend_chart(request: TrendChartRequest):
         params=request.model_dump()
     )
 
-    from app.workers.tasks.processing_tasks import process_trend_chart_task
+    from workers.tasks.processing_tasks import process_trend_chart_task
     process_trend_chart_task.delay(job_id, request.model_dump())
 
     return {

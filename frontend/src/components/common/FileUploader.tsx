@@ -1,10 +1,9 @@
-import { Upload, message, Card, Typography, Row, Col } from 'antd'
+import { Upload, message } from 'antd'
 import { InboxOutlined, FileExcelOutlined, FileWordOutlined } from '@ant-design/icons'
 import { UploadProps } from 'antd/es/upload'
 import { useState } from 'react'
 
 const { Dragger } = Upload
-const { Text } = Typography
 
 interface FileUploaderProps {
   accept?: string

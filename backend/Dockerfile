@@ -9,10 +9,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install system dependencies (using China mirror for better connectivity)
+RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    libpq-dev \
     fonts-wqy-microhei \
     fonts-wqy-zenhei \
     && rm -rf /var/lib/apt/lists/* \
@@ -32,9 +32,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY --chown=appuser:appgroup . .
 
-# Create storage directories
-RUN mkdir -p /app/storage/uploads /app/storage/results \
-    && chown -R appuser:appgroup /app/storage
+# Create storage directories and database directory
+RUN mkdir -p /app/storage/uploads /app/storage/results /app/data \
+    && chown -R appuser:appgroup /app/storage /app/data
 
 # Switch to non-root user
 USER appuser

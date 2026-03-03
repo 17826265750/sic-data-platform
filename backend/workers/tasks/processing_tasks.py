@@ -4,7 +4,7 @@ Processing Tasks - Celery异步任务定义
 import asyncio
 from typing import Dict, Any
 
-from app.workers.celery_app import celery_app
+from workers.celery_app import celery_app
 from app.services.job_service import JobService
 from app.core.processors import (
     ParameterCheckProcessor,

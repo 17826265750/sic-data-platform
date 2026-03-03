@@ -1,12 +1,11 @@
 import { useState, useCallback } from 'react'
-import { Card, Form, Button, Space, Input, Select, Typography, Divider, message, Table, InputNumber } from 'antd'
+import { Card, Button, Space, Input, Typography, Divider, message, Table, InputNumber } from 'antd'
 import { PlayCircleOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import JobProgress from '../components/common/JobProgress'
 import { trendChartApi, jobsApi } from '../api'
 import { useJobPolling } from '../hooks/useJobPolling'
-import type { JobInfo } from '../api/types'
 
-const { Title, Paragraph, Text } = Typography
+const { Paragraph } = Typography
 
 interface ProductData {
   name: string
@@ -14,8 +13,16 @@ interface ProductData {
   stds: number[]
 }
 
+interface ColumnType {
+  title: string
+  key?: string
+  dataIndex?: string
+  width?: number
+  children?: ColumnType[]
+  render?: (value: unknown, record: ProductData, index: number) => React.ReactNode
+}
+
 export default function TrendChart() {
-  const [form] = Form.useForm()
   const [products, setProducts] = useState<ProductData[]>([
     { name: '', means: [0, 0, 0, 0], stds: [0, 0, 0, 0] },
   ])
@@ -103,21 +110,21 @@ export default function TrendChart() {
     }
   }, [job])
 
-  const columns = [
+  const columns: ColumnType[] = [
     {
       title: '产品型号',
       dataIndex: 'name',
       key: 'name',
       width: 150,
-      render: (value: string, _: ProductData, index: number) => (
+      render: (value: unknown, _record: ProductData, index: number) => (
         <Input
-          value={value}
+          value={value as string}
           onChange={(e) => updateProduct(index, 'name', e.target.value)}
           placeholder="输入产品型号"
         />
       ),
     },
-    ...timeLabels.map((label, timeIndex) => ({
+    ...timeLabels.map((label, timeIndex): ColumnType => ({
       title: label,
       key: `time-${timeIndex}`,
       children: [
@@ -126,7 +133,7 @@ export default function TrendChart() {
           dataIndex: 'means',
           key: `mean-${timeIndex}`,
           width: 100,
-          render: (_: number[], record: ProductData, index: number) => (
+          render: (_: unknown, record: ProductData, index: number) => (
             <InputNumber
               value={record.means[timeIndex]}
               onChange={(val) => {
@@ -145,7 +152,7 @@ export default function TrendChart() {
           dataIndex: 'stds',
           key: `std-${timeIndex}`,
           width: 100,
-          render: (_: number[], record: ProductData, index: number) => (
+          render: (_: unknown, record: ProductData, index: number) => (
             <InputNumber
               value={record.stds[timeIndex]}
               onChange={(val) => {
@@ -166,7 +173,7 @@ export default function TrendChart() {
       title: '操作',
       key: 'action',
       width: 60,
-      render: (_: unknown, __: ProductData, index: number) => (
+      render: (_: unknown, _record: ProductData, index: number) => (
         <Button
           type="text"
           danger

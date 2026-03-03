@@ -60,7 +60,7 @@ async def analyze_stress_curve(request: StressCurveRequest):
         params=request.model_dump()
     )
 
-    from app.workers.tasks.processing_tasks import process_stress_curve_task
+    from workers.tasks.processing_tasks import process_stress_curve_task
     process_stress_curve_task.delay(job_id, request.model_dump())
 
     return {

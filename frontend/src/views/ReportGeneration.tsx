@@ -1,11 +1,11 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Card, Form, Button, Space, Select, Typography, Divider, message, Alert, Steps, Upload, Input } from 'antd'
+import { Card, Form, Button, Space, Select, Typography, message, Alert, Steps, Upload, Input } from 'antd'
 import { PlayCircleOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
 import JobProgress from '../components/common/JobProgress'
 import { reportGenerationApi, jobsApi } from '../api'
 import { useJobPolling } from '../hooks/useJobPolling'
 
-const { Paragraph, Text } = Typography
+const { Paragraph } = Typography
 
 export default function ReportGeneration() {
   const [templateId, setTemplateId] = useState<string | null>(null)

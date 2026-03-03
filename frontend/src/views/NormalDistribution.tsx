@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { Card, Form, Button, Space, Select, Switch, InputNumber, Checkbox, Typography, Divider, message, Alert } from 'antd'
 import { PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons'
 import FileUploader from '../components/common/FileUploader'
@@ -26,7 +26,7 @@ export default function NormalDistribution() {
     onError: (error) => message.error(`分析失败: ${error}`),
   })
 
-  const handleUploadSuccess = useCallback(async (uploadedFileId: string, filename: string) => {
+  const handleUploadSuccess = useCallback(async (uploadedFileId: string, _filename: string) => {
     setFileId(uploadedFileId)
     try {
       const response = await normalDistributionApi.preview(uploadedFileId)

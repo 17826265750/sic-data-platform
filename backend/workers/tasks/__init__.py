@@ -1,5 +1,5 @@
 """Tasks package"""
-from app.workers.tasks.processing_tasks import (
+from workers.tasks.processing_tasks import (
     process_parameter_check_task,
     process_trend_chart_task,
     process_stress_curve_task,

@@ -66,7 +66,7 @@ async def analyze_normal_distribution(request: NormalDistributionRequest):
         params=request.model_dump()
     )
 
-    from app.workers.tasks.processing_tasks import process_normal_distribution_task
+    from workers.tasks.processing_tasks import process_normal_distribution_task
     process_normal_distribution_task.delay(job_id, request.model_dump())
 
     return {

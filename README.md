@@ -70,8 +70,8 @@
           ┌───────────────────┼───────────────────┐
           ▼                   ▼                   ▼
     ┌──────────┐        ┌──────────┐        ┌──────────┐
-    │PostgreSQL│        │  Redis   │        │  本地    │
-    │  (Jobs)  │        │(Queue)   │        │ Storage  │
+    │ SQLite   │        │  Redis   │        │  本地    │
+    │  (Data)  │        │(Queue)   │        │ Storage  │
     └──────────┘        └──────────┘        └──────────┘
 ```
 
@@ -87,7 +87,7 @@
 | | FastAPI | 0.109+ |
 | | Celery | 5.3+ |
 | | pandas, numpy, matplotlib | Latest |
-| **数据库** | PostgreSQL | 15 |
+| **数据库** | SQLite | 3.x |
 | | Redis | 7 |
 | **部署** | Docker + Docker Compose | Latest |
 
@@ -136,10 +136,10 @@ docker-compose ps
 创建 `.env` 文件（从 `.env.example` 复制）：
 
 ```bash
-# PostgreSQL 配置
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=your_secure_password  # 必须修改！
-POSTGRES_DB=sic_platform
+# 数据库配置 (SQLite)
+# 数据库文件将存储在 ./data/sic_platform.db
+# DATABASE_URL=sqlite+aiosqlite:///./data/sic_platform.db
+# DATABASE_SYNC_URL=sqlite:///./data/sic_platform.db
 
 # 应用配置
 DEBUG=false                              # 生产环境设为false
@@ -158,7 +158,6 @@ Docker Compose 已配置资源限制：
 | backend | 2核 | 4GB |
 | worker | 4核 | 8GB |
 | frontend | 0.5核 | 512MB |
-| db | 1核 | 2GB |
 | redis | 0.5核 | 2GB |
 
 ### 存储配置
@@ -425,7 +424,6 @@ class NewProcessor(ProcessorBase):
 ```bash
 # 修改 .env
 DEBUG=false
-POSTGRES_PASSWORD=<强密码>
 CORS_ORIGINS=https://your-domain.com
 ```
 
@@ -452,8 +450,8 @@ server {
 #### 3. 数据备份
 
 ```bash
-# PostgreSQL 备份
-docker exec sic-db pg_dump -U postgres sic_platform > backup.sql
+# SQLite 备份
+cp ./data/sic_platform.db ./data/sic_platform_backup_$(date +%Y%m%d).db
 
 # Redis 备份
 docker exec sic-redis redis-cli BGSAVE

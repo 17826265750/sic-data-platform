@@ -91,7 +91,7 @@ async def generate_report(request: ReportGenerationRequest):
         params=request.model_dump()
     )
 
-    from app.workers.tasks.processing_tasks import process_report_generation_task
+    from workers.tasks.processing_tasks import process_report_generation_task
     process_report_generation_task.delay(job_id, request.model_dump())
 
     return {

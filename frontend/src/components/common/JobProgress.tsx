@@ -6,7 +6,7 @@ import {
   ClockCircleOutlined,
   DownloadOutlined,
 } from '@ant-design/icons'
-import { JobStatus } from '../api/types'
+import { JobStatus } from '../../api/types'
 
 const { Text, Paragraph } = Typography
 

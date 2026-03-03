@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Card, Table, Tag, Button, Space, Select, Typography, Badge } from 'antd'
-import { DownloadOutlined, ReloadOutlined, EyeOutlined } from '@ant-design/icons'
+import { DownloadOutlined, ReloadOutlined } from '@ant-design/icons'
 import { jobsApi } from '../api'
 import type { JobInfo, JobStatus } from '../api/types'
 

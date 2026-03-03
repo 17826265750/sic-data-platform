@@ -115,7 +115,7 @@ async def cancel_job(job_id: str):
 
     if job_info["status"] == JobStatus.RUNNING:
         # Revoke Celery task
-        from app.workers.celery_app import celery_app
+        from workers.celery_app import celery_app
         celery_app.control.revoke(job_id, terminate=True)
 
     await job_service.update_job(job_id, {"status": JobStatus.CANCELLED})

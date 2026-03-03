@@ -20,9 +20,9 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
 
-    # Database - No default credentials, must be set via environment
-    DATABASE_URL: Optional[str] = None
-    DATABASE_SYNC_URL: Optional[str] = None
+    # Database - SQLite by default
+    DATABASE_URL: str = "sqlite+aiosqlite:///./data/sic_platform.db"
+    DATABASE_SYNC_URL: str = "sqlite:///./data/sic_platform.db"
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -56,6 +56,13 @@ class Settings(BaseSettings):
                 UserWarning
             )
         return v
+
+    @property
+    def database_path(self) -> Path:
+        """Get database directory path"""
+        path = Path("./data")
+        path.mkdir(parents=True, exist_ok=True)
+        return path
 
     @property
     def cors_origins_list(self) -> List[str]:

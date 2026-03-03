@@ -16,7 +16,7 @@ export default function ParameterCheck() {
   // Use custom hook for job polling - prevents memory leaks
   const { job, isPolling, startPolling, stopPolling } = useJobPolling({
     interval: 2000,
-    onComplete: (completedJob: JobInfo) => {
+    onComplete: (_completedJob: JobInfo) => {
       message.success('数据处理完成！')
     },
     onError: (error: string) => {

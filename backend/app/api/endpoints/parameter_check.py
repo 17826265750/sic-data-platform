@@ -87,9 +87,9 @@ async def process_parameter_check(request: ParameterCheckRequest):
 
     异步任务，返回 job_id 用于查询进度
     """
-    # Validate input directory exists
-    if not request.input_directory:
-        raise HTTPException(status_code=400, detail="请指定输入目录")
+    # Validate file_ids exists
+    if not request.file_ids:
+        raise HTTPException(status_code=400, detail="请上传文件")
 
     try:
         job_id = await job_service.create_job(
@@ -98,7 +98,7 @@ async def process_parameter_check(request: ParameterCheckRequest):
         )
 
         # Start async processing
-        from app.workers.tasks.processing_tasks import process_parameter_check_task
+        from workers.tasks.processing_tasks import process_parameter_check_task
         process_parameter_check_task.delay(job_id, request.model_dump())
 
         logger.info(f"Parameter check job created: {job_id}")

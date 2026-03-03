@@ -31,7 +31,7 @@ celery_app.conf.update(
 
     # Task routing
     task_routes={
-        "app.workers.tasks.processing_tasks.*": {"queue": "processing"},
+        "workers.tasks.processing_tasks.*": {"queue": "processing"},
     },
 
     # Beat scheduler (for periodic tasks if needed)
@@ -44,4 +44,4 @@ celery_app.conf.update(
 )
 
 # Auto-discover tasks
-celery_app.autodiscover_tasks(["app.workers.tasks"])
+celery_app.autodiscover_tasks(["workers.tasks"])

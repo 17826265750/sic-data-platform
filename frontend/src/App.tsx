@@ -1,5 +1,4 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { Layout } from 'antd'
 import MainLayout from './components/layout/MainLayout'
 import Home from './views/Home'
 import ParameterCheck from './views/ParameterCheck'

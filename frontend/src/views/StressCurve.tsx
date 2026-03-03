@@ -25,7 +25,7 @@ export default function StressCurve() {
     onError: (error) => message.error(`分析失败: ${error}`),
   })
 
-  const handleUploadSuccess = useCallback(async (uploadedFileId: string, filename: string) => {
+  const handleUploadSuccess = useCallback(async (uploadedFileId: string, _filename: string) => {
     setFileId(uploadedFileId)
     // 获取文件预览信息
     try {
